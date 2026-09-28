@@ -30,6 +30,14 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final String[] ROTAS_DE_METAS = {
+            "/api/representantes/**",
+            "/api/fornecedores/**",
+            "/api/metas/**",
+            "/api/metas-representante/**",
+            "/api/especialista-pet/**",
+    };
+
     private final JwtAuthFilter jwtAuthFilter;
     private final String[] origensPermitidas;
 
@@ -59,17 +67,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
-                        // Criar/excluir logins e gerenciar representantes e tipos de meta é coisa de admin;
-                        // o resto (listar usuários, materiais, agendamentos) continua para qualquer
-                        // login autenticado, como sempre foi.
-                        .requestMatchers(HttpMethod.POST, "/api/auth/usuarios").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/auth/usuarios/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/representantes/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/fornecedores/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/metas/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/metas-representante/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/especialista-pet/**").hasAuthority("ROLE_ADMIN")
+                        // Logins e o comparativo de vendas são só do admin.
+                        .requestMatchers("/api/auth/usuarios", "/api/auth/usuarios/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/dados/**").hasAuthority("ROLE_ADMIN")
+                        // Metas e campanhas: supervisor e representante só consultam (GET) — e o
+                        // representante só recebe o que é dele, filtrado nos controllers (EscopoAcesso).
+                        // Criar, editar, importar e sincronizar continua só pro admin.
+                        .requestMatchers(HttpMethod.GET, ROTAS_DE_METAS).hasAnyAuthority(
+                                "ROLE_ADMIN", "ROLE_SUPERVISOR", "ROLE_REPRESENTANTE")
+                        .requestMatchers(ROTAS_DE_METAS).hasAuthority("ROLE_ADMIN")
+                        // Materiais e agendamentos: qualquer login, como sempre foi.
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

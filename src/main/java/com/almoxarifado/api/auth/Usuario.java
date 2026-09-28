@@ -34,6 +34,13 @@ public class Usuario {
     @Column(columnDefinition = "LONGTEXT")
     private String avatar;
 
+    /**
+     * Representante dono desse login, quando o role é REPRESENTANTE. Só o id, sem chave estrangeira,
+     * pra não impedir a exclusão do representante (o login fica sem enxergar nada até ser religado).
+     */
+    @Column(name = "representante_id")
+    private String representanteId;
+
     public Usuario() {
     }
 
@@ -75,5 +82,13 @@ public class Usuario {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public String getRepresentanteId() {
+        return representanteId;
+    }
+
+    public void setRepresentanteId(String representanteId) {
+        this.representanteId = representanteId;
     }
 }

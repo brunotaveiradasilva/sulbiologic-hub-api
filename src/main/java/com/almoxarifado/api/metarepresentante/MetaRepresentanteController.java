@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.almoxarifado.api.ads.AdsSincronizacaoService;
+import com.almoxarifado.api.auth.EscopoAcesso;
 import com.almoxarifado.api.common.RecursoJaExisteException;
 import com.almoxarifado.api.common.RecursoNaoEncontradoException;
 import com.almoxarifado.api.meta.Meta;
@@ -28,7 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Valor de meta (alvo + realizado) atribuído a um representante, por mês. Mês que já acabou fica só
- * pra consulta (ver {@link Mes#garantirAberto}). Só admins acessam (ver SecurityConfig).
+ * pra consulta (ver {@link Mes#garantirAberto}). Só admins editam; supervisor e representante só
+ * consultam, e o representante só as dele (ver SecurityConfig e EscopoAcesso).
  */
 @RestController
 @RequestMapping("/api/metas-representante")
@@ -39,31 +41,41 @@ public class MetaRepresentanteController {
     private final RepresentanteRepository representantes;
     private final MetaRepository metas;
     private final AdsSincronizacaoService sincronizacao;
+    private final EscopoAcesso escopo;
 
     public MetaRepresentanteController(
             MetaRepresentanteRepository repository,
             TotalVendidoMensalRepository totais,
             RepresentanteRepository representantes,
             MetaRepository metas,
-            AdsSincronizacaoService sincronizacao) {
+            AdsSincronizacaoService sincronizacao,
+            EscopoAcesso escopo) {
         this.repository = repository;
         this.totais = totais;
         this.representantes = representantes;
         this.metas = metas;
         this.sincronizacao = sincronizacao;
+        this.escopo = escopo;
     }
 
-    /** Todos os meses, ou só um com ?mes=2026-09. */
+    /** Todos os meses, ou só um com ?mes=2026-09. Login de representante só recebe as dele. */
     @GetMapping
     public List<MetaRepresentante> listar(@RequestParam(required = false) String mes) {
-        if (mes == null || mes.isBlank()) return repository.findAll();
-        return repository.findByMes(Mes.ler(mes).toString());
+        List<MetaRepresentante> todas = mes == null || mes.isBlank()
+                ? repository.findAll()
+                : repository.findByMes(Mes.ler(mes).toString());
+        return escopo.representanteRestrito()
+                .map(id -> todas.stream().filter(m -> id.equals(m.getRepresentante().getId())).toList())
+                .orElse(todas);
     }
 
     /** Total vendido por representante e mês (card "Total vendido"), vindo da sincronização com a ADS. */
     @GetMapping("/totais-vendidos")
     public List<TotalVendidoMensal> totaisVendidos() {
-        return totais.findAll();
+        List<TotalVendidoMensal> todos = totais.findAll();
+        return escopo.representanteRestrito()
+                .map(id -> todos.stream().filter(t -> id.equals(t.getRepresentanteId())).toList())
+                .orElse(todos);
     }
 
     /** Força agora o recálculo do realizado a partir da ADS, do mês pedido (?mes=2026-09) ou do atual. */

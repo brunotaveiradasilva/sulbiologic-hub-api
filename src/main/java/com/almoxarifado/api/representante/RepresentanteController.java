@@ -4,6 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.almoxarifado.api.auth.EscopoAcesso;
 import com.almoxarifado.api.common.RecursoNaoEncontradoException;
 import com.almoxarifado.api.fornecedor.Fornecedor;
 import com.almoxarifado.api.fornecedor.FornecedorRepository;
@@ -20,22 +21,27 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** CRUD de representantes. Só admins acessam (ver SecurityConfig). */
+/** CRUD de representantes. Só admins editam; supervisor e representante só listam (ver SecurityConfig). */
 @RestController
 @RequestMapping("/api/representantes")
 public class RepresentanteController {
 
     private final RepresentanteRepository repository;
     private final FornecedorRepository fornecedores;
+    private final EscopoAcesso escopo;
 
-    public RepresentanteController(RepresentanteRepository repository, FornecedorRepository fornecedores) {
+    public RepresentanteController(RepresentanteRepository repository, FornecedorRepository fornecedores, EscopoAcesso escopo) {
         this.repository = repository;
         this.fornecedores = fornecedores;
+        this.escopo = escopo;
     }
 
+    /** Todos — ou, pra um login de representante, só ele mesmo. */
     @GetMapping
     public List<Representante> listar() {
-        return repository.findAll();
+        return escopo.representanteRestrito()
+                .map(id -> repository.findById(id).map(List::of).orElse(List.of()))
+                .orElseGet(repository::findAll);
     }
 
     @PostMapping
