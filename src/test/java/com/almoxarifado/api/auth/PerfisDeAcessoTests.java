@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -123,6 +124,43 @@ class PerfisDeAcessoTests {
 
         mvc.perform(como("admin", get("/api/auth/usuarios")))
                 .andExpect(jsonPath("$[?(@.usuario == 'joao')].representanteNome").value("João Souza"));
+    }
+
+    @Test
+    void guardaDadosPessoaisEAdminEditaPerfilESenha() throws Exception {
+        mvc.perform(como("admin", post("/api/auth/usuarios")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"usuario\":\"tatiane\",\"senha\":\"1234\",\"role\":\"SUPERVISOR\",\"nome\":\" Tatiane \","
+                        + "\"sobrenome\":\"Santana\",\"email\":\"tati@exemplo.com\",\"dataNascimento\":\"1990-05-17\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(como("admin", get("/api/auth/usuarios")))
+                .andExpect(jsonPath("$[?(@.usuario == 'tatiane')].nome").value("Tatiane"))
+                .andExpect(jsonPath("$[?(@.usuario == 'tatiane')].dataNascimento").value("1990-05-17"));
+
+        mvc.perform(como("admin", put("/api/auth/usuarios/tatiane")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"REPRESENTANTE\",\"representanteId\":\"" + joao.getId() + "\",\"nome\":\"Tatiane\","
+                        + "\"sobrenome\":\"Santana\",\"email\":\"\",\"novaSenha\":\"nova-senha\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("REPRESENTANTE"))
+                .andExpect(jsonPath("$.representanteNome").value("João Souza"))
+                .andExpect(jsonPath("$.email").doesNotExist());
+
+        Usuario editado = usuarios.findByUsuarioIgnoreCase("tatiane").orElseThrow();
+        assertThat(passwordEncoder.matches("nova-senha", editado.getSenhaHash())).isTrue();
+        assertThat(editado.getDataNascimento()).isNull();
+
+        mvc.perform(como("admin", put("/api/auth/usuarios/tatiane")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"SUPERVISOR\",\"email\":\"sem-arroba\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(como("renata", put("/api/auth/usuarios/tatiane")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"ADMIN\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void naoRebaixaOUltimoAdmin() throws Exception {
+        mvc.perform(como("admin", put("/api/auth/usuarios/admin")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"SUPERVISOR\"}"))
+                .andExpect(status().isConflict());
     }
 
     @Test

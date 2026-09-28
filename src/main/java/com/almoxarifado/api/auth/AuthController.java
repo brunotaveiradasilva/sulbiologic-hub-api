@@ -1,5 +1,6 @@
 package com.almoxarifado.api.auth;
 
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -68,11 +70,7 @@ public class AuthController {
                 .collect(Collectors.toMap(Representante::getId, Representante::getNome));
         return usuarios.findAll().stream()
                 .sorted(Comparator.comparing(Usuario::getUsuario, String.CASE_INSENSITIVE_ORDER))
-                .map(u -> new UsuarioResumo(
-                        u.getUsuario(),
-                        u.getRole(),
-                        u.getRepresentanteId(),
-                        u.getRepresentanteId() == null ? null : nomes.get(u.getRepresentanteId())))
+                .map(u -> resumo(u, nomes))
                 .toList();
     }
 
@@ -87,23 +85,74 @@ public class AuthController {
             throw new UsuarioJaExisteException("Já existe um usuário com esse nome");
         });
 
-        Role role = corpo.role() == null ? Role.USUARIO : corpo.role();
-        String representanteId = null;
-        if (role == Role.REPRESENTANTE) {
-            if (corpo.representanteId() == null || corpo.representanteId().isBlank()) {
-                throw new UsuarioInvalidoException("Escolha o representante desse login");
-            }
-            representanteId = representantes.findById(corpo.representanteId())
-                    .orElseThrow(() -> new RecursoNaoEncontradoException("Representante não encontrado"))
-                    .getId();
-        }
-
         Usuario novo = new Usuario();
         novo.setUsuario(corpo.usuario().trim());
         novo.setSenhaHash(passwordEncoder.encode(corpo.senha()));
-        novo.setRole(role);
-        novo.setRepresentanteId(representanteId);
+        definirPerfil(novo, corpo.role(), corpo.representanteId());
+        definirDadosPessoais(novo, corpo.nome(), corpo.sobrenome(), corpo.email(), corpo.dataNascimento());
         usuarios.save(novo);
+    }
+
+    /** Edita perfil, dados pessoais e, se vier novaSenha, redefine a senha. Nunca rebaixa o último ADMIN. */
+    @PutMapping("/usuarios/{usuario}")
+    public UsuarioResumo atualizarUsuario(@PathVariable String usuario, @Valid @RequestBody AtualizarUsuarioRequest corpo) {
+        Usuario alvo = usuarios.findByUsuarioIgnoreCase(usuario)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário " + usuario + " não encontrado"));
+
+        Role novoRole = corpo.role() == null ? alvo.getRole() : corpo.role();
+        if (alvo.getRole() == Role.ADMIN && novoRole != Role.ADMIN && usuarios.countByRole(Role.ADMIN) <= 1) {
+            throw new UltimoUsuarioException("Esse é o único administrador: não dá pra trocar o perfil dele");
+        }
+        if (corpo.novaSenha() != null && !corpo.novaSenha().isBlank()) {
+            if (corpo.novaSenha().length() < 4) {
+                throw new UsuarioInvalidoException("A senha precisa ter pelo menos 4 caracteres");
+            }
+            alvo.setSenhaHash(passwordEncoder.encode(corpo.novaSenha()));
+        }
+
+        definirPerfil(alvo, novoRole, corpo.representanteId());
+        definirDadosPessoais(alvo, corpo.nome(), corpo.sobrenome(), corpo.email(), corpo.dataNascimento());
+        return resumo(usuarios.save(alvo), null);
+    }
+
+    /** role vazio = USUARIO. Só REPRESENTANTE guarda representante — e é obrigatório pra ele. */
+    private void definirPerfil(Usuario usuario, Role role, String representanteId) {
+        Role perfil = role == null ? Role.USUARIO : role;
+        String vinculo = null;
+        if (perfil == Role.REPRESENTANTE) {
+            if (representanteId == null || representanteId.isBlank()) {
+                throw new UsuarioInvalidoException("Escolha o representante desse login");
+            }
+            vinculo = representantes.findById(representanteId)
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Representante não encontrado"))
+                    .getId();
+        }
+        usuario.setRole(perfil);
+        usuario.setRepresentanteId(vinculo);
+    }
+
+    private static void definirDadosPessoais(Usuario usuario, String nome, String sobrenome, String email, LocalDate nascimento) {
+        usuario.setNome(limpar(nome));
+        usuario.setSobrenome(limpar(sobrenome));
+        usuario.setEmail(limpar(email));
+        usuario.setDataNascimento(nascimento);
+    }
+
+    /** Texto em branco vira null, pra não guardar "" no banco. */
+    private static String limpar(String texto) {
+        return texto == null || texto.isBlank() ? null : texto.trim();
+    }
+
+    /** nomesRepresentantes null = busca só o do próprio login. */
+    private UsuarioResumo resumo(Usuario u, Map<String, String> nomesRepresentantes) {
+        String representanteNome = null;
+        if (u.getRepresentanteId() != null) {
+            representanteNome = nomesRepresentantes != null
+                    ? nomesRepresentantes.get(u.getRepresentanteId())
+                    : representantes.findById(u.getRepresentanteId()).map(Representante::getNome).orElse(null);
+        }
+        return new UsuarioResumo(u.getUsuario(), u.getRole(), u.getRepresentanteId(), representanteNome,
+                u.getNome(), u.getSobrenome(), u.getEmail(), u.getDataNascimento());
     }
 
     /** Exclui um login. Nunca o último ADMIN — senão ninguém mais consegue gerenciar o sistema. */
