@@ -6,6 +6,7 @@ import java.util.Map;
 import com.almoxarifado.api.ads.AdsApiException;
 import com.almoxarifado.api.auth.CredenciaisInvalidasException;
 import com.almoxarifado.api.auth.UltimoUsuarioException;
+import com.almoxarifado.api.auth.UsuarioInvalidoException;
 import com.almoxarifado.api.auth.UsuarioJaExisteException;
 import com.almoxarifado.api.dados.ConsultaInvalidaException;
 import com.almoxarifado.api.metarepresentante.MesFechadoException;
@@ -58,6 +59,11 @@ public class TratadorDeErros {
 
     @ExceptionHandler(MesInvalidoException.class)
     public ResponseEntity<Map<String, String>> mesInvalido(MesInvalidoException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("erro", ex.getMessage()));
+    }
+
+    @ExceptionHandler(UsuarioInvalidoException.class)
+    public ResponseEntity<Map<String, String>> usuarioInvalido(UsuarioInvalidoException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("erro", ex.getMessage()));
     }
 

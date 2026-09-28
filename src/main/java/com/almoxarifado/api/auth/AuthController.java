@@ -2,8 +2,12 @@ package com.almoxarifado.api.auth;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.almoxarifado.api.common.RecursoNaoEncontradoException;
+import com.almoxarifado.api.representante.Representante;
+import com.almoxarifado.api.representante.RepresentanteRepository;
 
 import jakarta.validation.Valid;
 
@@ -27,9 +31,15 @@ public class AuthController {
     private final UsuarioRepository usuarios;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RepresentanteRepository representantes;
 
-    public AuthController(UsuarioRepository usuarios, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthController(
+            UsuarioRepository usuarios,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            RepresentanteRepository representantes) {
         this.usuarios = usuarios;
+        this.representantes = representantes;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
@@ -51,38 +61,60 @@ public class AuthController {
                 usuario.getAvatar());
     }
 
-    /** Nomes de todos os logins (nunca as senhas/hashes). */
+    /** Todos os logins com perfil e representante (nunca as senhas/hashes). Só admin (ver SecurityConfig). */
     @GetMapping("/usuarios")
-    public List<String> listarUsuarios() {
+    public List<UsuarioResumo> listarUsuarios() {
+        Map<String, String> nomes = representantes.findAll().stream()
+                .collect(Collectors.toMap(Representante::getId, Representante::getNome));
         return usuarios.findAll().stream()
-                .map(Usuario::getUsuario)
-                .sorted(Comparator.naturalOrder())
+                .sorted(Comparator.comparing(Usuario::getUsuario, String.CASE_INSENSITIVE_ORDER))
+                .map(u -> new UsuarioResumo(
+                        u.getUsuario(),
+                        u.getRole(),
+                        u.getRepresentanteId(),
+                        u.getRepresentanteId() == null ? null : nomes.get(u.getRepresentanteId())))
                 .toList();
     }
 
-    /** Cria outro login. Exige estar autenticado — só quem já entra no sistema pode convidar mais gente. */
+    /**
+     * Cria outro login, com o perfil escolhido. REPRESENTANTE precisa dizer qual representante é —
+     * é por ele que a API filtra o que esse login enxerga.
+     */
     @PostMapping("/usuarios")
     @ResponseStatus(HttpStatus.CREATED)
     public void criarUsuario(@Valid @RequestBody CriarUsuarioRequest corpo) {
-        usuarios.findByUsuarioIgnoreCase(corpo.usuario()).ifPresent(u -> {
+        usuarios.findByUsuarioIgnoreCase(corpo.usuario().trim()).ifPresent(u -> {
             throw new UsuarioJaExisteException("Já existe um usuário com esse nome");
         });
 
+        Role role = corpo.role() == null ? Role.USUARIO : corpo.role();
+        String representanteId = null;
+        if (role == Role.REPRESENTANTE) {
+            if (corpo.representanteId() == null || corpo.representanteId().isBlank()) {
+                throw new UsuarioInvalidoException("Escolha o representante desse login");
+            }
+            representanteId = representantes.findById(corpo.representanteId())
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Representante não encontrado"))
+                    .getId();
+        }
+
         Usuario novo = new Usuario();
-        novo.setUsuario(corpo.usuario());
+        novo.setUsuario(corpo.usuario().trim());
         novo.setSenhaHash(passwordEncoder.encode(corpo.senha()));
+        novo.setRole(role);
+        novo.setRepresentanteId(representanteId);
         usuarios.save(novo);
     }
 
-    /** Exclui um login. Nunca o último que resta — senão ninguém mais consegue entrar. */
+    /** Exclui um login. Nunca o último ADMIN — senão ninguém mais consegue gerenciar o sistema. */
     @DeleteMapping("/usuarios/{usuario}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void excluirUsuario(@PathVariable String usuario) {
         Usuario alvo = usuarios.findByUsuarioIgnoreCase(usuario)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário " + usuario + " não encontrado"));
 
-        if (usuarios.count() <= 1) {
-            throw new UltimoUsuarioException("Não dá para excluir o único login que existe");
+        if (alvo.getRole() == Role.ADMIN && usuarios.countByRole(Role.ADMIN) <= 1) {
+            throw new UltimoUsuarioException("Não dá para excluir o único administrador");
         }
 
         usuarios.delete(alvo);
