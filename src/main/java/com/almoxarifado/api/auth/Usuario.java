@@ -1,5 +1,7 @@
 package com.almoxarifado.api.auth;
 
+import java.time.LocalDate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -41,7 +43,52 @@ public class Usuario {
     @Column(name = "representante_id")
     private String representanteId;
 
+    /** Dados da pessoa dona do login — todos opcionais (logins antigos não têm). */
+    @Column(length = 80)
+    private String nome;
+
+    @Column(length = 80)
+    private String sobrenome;
+
+    @Column(length = 120)
+    private String email;
+
+    @Column(name = "data_nascimento")
+    private LocalDate dataNascimento;
+
     public Usuario() {
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public void setNome(String nome) {
+        this.nome = nome;
+    }
+
+    public String getSobrenome() {
+        return sobrenome;
+    }
+
+    public void setSobrenome(String sobrenome) {
+        this.sobrenome = sobrenome;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public LocalDate getDataNascimento() {
+        return dataNascimento;
+    }
+
+    public void setDataNascimento(LocalDate dataNascimento) {
+        this.dataNascimento = dataNascimento;
     }
 
     public String getId() {
