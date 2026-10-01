@@ -123,7 +123,8 @@ Todos sob o prefixo `/api`. Corpos e respostas em JSON, no mesmo formato usado p
 | PUT    | `/api/metas-representante/{id}`   | Atualiza um valor de meta; o `valorRealizado` não muda por aqui (exige ser ADMIN) |
 | DELETE | `/api/metas-representante/{id}`   | Exclui um valor de meta (exige ser ADMIN)     |
 | GET    | `/api/dados/vendas?inicio=2025-09-01&fim=2025-09-30&representanteId=&fornecedorId=` | Vendas de um período (até 1 ano) direto da ADS, por representante do cadastro e no total: R$, kg e clientes positivados. `representanteId` e `fornecedorId` opcionais e aceitam vários (repetindo o parâmetro ou separados por vírgula) — ver **Aba Dados** (exige ser ADMIN) |
-| GET    | `/actuator/health`           | Health check (usado pelo Railway/Render), sem login |
+| POST   | `/api/interno/sincronizacao-diaria` | A mesma sincronização das 6h (metas e Especialista Pet), pro Cloud Scheduler chamar. Sem login: exige o header `X-Cron-Token` igual a `CRON_TOKEN` (sem `CRON_TOKEN` configurado dá `404`) |
+| GET    | `/actuator/health`           | Health check (usado pelo Railway/Render/Cloud Run), sem login |
 
 ## Variáveis de ambiente
 
@@ -144,6 +145,8 @@ Todos sob o prefixo `/api`. Corpos e respostas em JSON, no mesmo formato usado p
 | `ADS_USER_AGENT`         | `SulBiologic`                                 | Header `User-Agent` exigido pela API da ADS |
 | `ADS_ESPECIFICO_ID`      | `074`                                          | Valor fixo da conta, exigido em toda chamada de histórico de vendas (não é um filtro) |
 | `ADS_CNPJ_DISTRIBUIDORA` | *(vazio)*                                    | CNPJ da distribuidora, usado como path param nas chamadas à ADS |
+| `AGENDADOR_INTERNO`      | `true`                                        | Roda os jobs das 6h dentro da API. `false` no Cloud Run, onde quem chama é o Cloud Scheduler — ver **Deploy (Cloud Run + TiDB)** |
+| `CRON_TOKEN`             | *(vazio: rota desligada)*                     | Token que o Cloud Scheduler manda no header `X-Cron-Token` pra `POST /api/interno/sincronizacao-diaria` (ex: `openssl rand -hex 32`) |
 
 ## Integração com a ADS (histórico de vendas)
 
@@ -248,7 +251,87 @@ escolhido sem nenhum desses códigos nas metas dá `400`, com o nome dele na men
 Período que terminou há mais de 5 dias fica guardado em memória por 6 horas, por representante
 (até 160 combinações de representante e período), porque buscar um ano inteiro na ADS demora.
 
+## Deploy (Cloud Run + TiDB)
+
+Fica dentro das cotas gratuitas permanentes: a API roda no [Cloud Run](https://cloud.google.com/run)
+(Google Cloud, o mesmo projeto do Firebase), o banco é um [TiDB Cloud Serverless](https://tidbcloud.com)
+(compatível com MySQL) e o [Cloud Scheduler](https://cloud.google.com/scheduler) dispara a
+sincronização diária com a ADS. O Google exige cartão cadastrado (plano Blaze), mas só cobra o que
+passar da cota. Configure um alerta de orçamento em **Faturamento → Orçamentos e alertas** pra ser
+avisado se isso acontecer.
+
+O Cloud Run desliga a API quando ninguém usa, então o primeiro acesso depois de um tempo parado leva
+uns 10–20 s. Pelo mesmo motivo os `@Scheduled` das 6h não disparariam sozinhos: lá eles ficam
+desligados (`AGENDADOR_INTERNO=false`) e o Cloud Scheduler chama
+`POST /api/interno/sincronizacao-diaria`, autenticado pelo header `X-Cron-Token`.
+
+**1. Banco (TiDB).** Crie um cluster *Serverless* (ou *Starter*) em [tidbcloud.com](https://tidbcloud.com),
+numa região da AWS perto da do Cloud Run (ex.: `us-east-1` com o Cloud Run em `us-east1`). Em
+**Connect**, gere a senha e anote host, porta (4000) e usuário (`xxxx.root`). Crie o banco com
+`CREATE DATABASE almoxarifado;` no SQL Editor. A conexão exige TLS, por isso a `DB_URL` leva os
+parâmetros de SSL:
+
+```
+jdbc:mysql://HOST:4000/almoxarifado?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3
+```
+
+As tabelas são criadas sozinhas no primeiro boot (`ddl-auto: update`). Pra levar os dados de um
+MySQL antigo, exporte com `mysqldump --no-tablespaces --set-gtid-purged=OFF ... > backup.sql` e
+importe no TiDB (`mysql --ssl-mode=VERIFY_IDENTITY -h HOST -P 4000 -u USUARIO -p almoxarifado < backup.sql`)
+**antes** de subir a API.
+
+**2. API (Cloud Run).** Com o [gcloud](https://cloud.google.com/sdk/docs/install) instalado e logado
+(`gcloud auth login`, `gcloud config set project SEU_PROJETO`), crie um `env.yaml` (está no
+`.gitignore`, não suba ele):
+
+```yaml
+DB_URL: "jdbc:mysql://HOST:4000/almoxarifado?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3"
+DB_USERNAME: "xxxx.root"
+DB_PASSWORD: "..."
+CORS_ALLOWED_ORIGINS: "https://brunotaveiradasilva.github.io"
+JWT_SECRET: "..."        # openssl rand -base64 48
+ADMIN_USERNAME: "admin"
+ADMIN_PASSWORD: "..."
+ADS_API_KEY: "..."
+ADS_CNPJ_DISTRIBUIDORA: "..."
+AGENDADOR_INTERNO: "false"
+CRON_TOKEN: "..."        # openssl rand -hex 32
+```
+
+E publique direto do código-fonte (o Cloud Build usa o `Dockerfile`):
+
+```bash
+gcloud run deploy almoxarifado-api --source . --region us-east1 \
+  --allow-unauthenticated --env-vars-file env.yaml \
+  --memory 1Gi --cpu 1 --cpu-boost --max-instances 1 --timeout 1800
+```
+
+- `--max-instances 1`: o progresso da sincronização e o cache do comparativo de vendas ficam em
+  memória, então tudo precisa cair na mesma instância. De quebra, segura o gasto.
+- `--timeout 1800`: a sincronização com a ADS pode levar minutos, e o Cloud Run só dá CPU enquanto a
+  requisição está aberta.
+
+A URL que o comando imprime (`https://almoxarifado-api-xxxx.us-east1.run.app`) é o `VITE_API_URL`
+do front-end (secret do repositório `sulbiologic-hub` no GitHub; rode o workflow de deploy de novo
+depois de trocar). Pra atualizar a API depois, é o mesmo `gcloud run deploy`. Em **Artifact Registry**,
+uma política de limpeza que mantém só as últimas imagens evita passar dos 0,5 GB gratuitos.
+
+**3. Sincronização diária (Cloud Scheduler).**
+
+```bash
+gcloud scheduler jobs create http sincronizacao-diaria --location us-east1 \
+  --schedule "0 6 * * *" --time-zone "America/Sao_Paulo" \
+  --uri "https://URL-DO-CLOUD-RUN/api/interno/sincronizacao-diaria" --http-method POST \
+  --headers "X-Cron-Token=O_MESMO_CRON_TOKEN" --attempt-deadline 1800s
+```
+
+Pra testar na hora: `gcloud scheduler jobs run sincronizacao-diaria --location us-east1`, e veja
+os logs em **Cloud Run → almoxarifado-api → Registros**.
+
 ## Deploy (Railway)
+
+Num servidor sempre ligado como o Railway, os jobs das 6h rodam dentro da própria API (não precisa
+de `AGENDADOR_INTERNO` nem `CRON_TOKEN`).
 
 1. Crie uma conta em [railway.app](https://railway.app) (dá para logar com a conta do GitHub).
 2. **New Project → Deploy from GitHub repo** e escolha `almoxarifado-api`. O Railway detecta o

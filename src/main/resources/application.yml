@@ -60,3 +60,9 @@ app:
     user-agent: ${ADS_USER_AGENT:SulBiologic}
     especifico-id: ${ADS_ESPECIFICO_ID:074}
     cnpj-distribuidora: ${ADS_CNPJ_DISTRIBUIDORA:}
+
+  # Jobs diários das 6h dentro da própria API (ver config/AgendadorConfig). No Cloud Run fica false
+  # e o Cloud Scheduler chama POST /api/interno/sincronizacao-diaria com o header X-Cron-Token igual
+  # a CRON_TOKEN (sem CRON_TOKEN essa rota fica desligada).
+  agendador-interno: ${AGENDADOR_INTERNO:true}
+  cron-token: ${CRON_TOKEN:}

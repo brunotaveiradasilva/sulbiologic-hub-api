@@ -23,7 +23,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * API sem sessão (stateless): cada requisição se autentica sozinha com um JWT no header
- * Authorization. Só /api/auth/login e o health check ficam abertos; todo o resto exige token
+ * Authorization. Só /api/auth/login, o health check e a sincronização diária (que confere um token
+ * próprio, ver ads/SincronizacaoDiariaController) ficam abertos; todo o resto exige token
  * válido — é o {@link JwtAuthFilter} quem lê e valida esse token antes de chegar no controller.
  */
 @Configuration
@@ -67,6 +68,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+                        // Chamada pelo Cloud Scheduler, sem JWT: o controller confere o X-Cron-Token.
+                        .requestMatchers(HttpMethod.POST, "/api/interno/sincronizacao-diaria").permitAll()
                         // Logins e o comparativo de vendas são só do admin.
                         .requestMatchers("/api/auth/usuarios", "/api/auth/usuarios/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/dados/**").hasAuthority("ROLE_ADMIN")
