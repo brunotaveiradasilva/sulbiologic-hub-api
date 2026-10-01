@@ -11,3 +11,6 @@ target/
 
 # ambiente local
 .env
+
+# variáveis do Cloud Run (ver README)
+env.yaml
