@@ -37,7 +37,7 @@ import org.springframework.stereotype.Service;
  *   qualquer coisa com ele nos {@value #MESES_DE_CARTEIRA} meses antes da campanha; desses, fica quem
  *   não tem nenhuma compra de Wellpet (com qualquer representante) desde o lançamento, em
  *   {@link #LANCAMENTO_WELLPET}. Cliente atendido por mais de um representante fica com o da última
- *   compra.</li>
+ *   compra. Vendas das contas da casa ({@link #CONTAS_SEM_CARTEIRA}) não formam carteira.</li>
  *   <li><b>Positivação</b> ({@link #sincronizarMes}): o Wellpet que cada cliente da lista comprou no mês
  *   da campanha, com qualquer representante — o que vale é o cliente.</li>
  * </ul>
@@ -54,6 +54,13 @@ public class AdsCampanhaWellpetService {
     /** O Wellpet foi lançado em setembro/2025: antes disso ninguém tinha como ter comprado. */
     static final LocalDate LANCAMENTO_WELLPET = LocalDate.of(2025, 9, 1);
     static final int MESES_DE_CARTEIRA = 12;
+    /**
+     * Contas da casa na ADS que não são representantes: 001 SULBIOLOGIC DISTRIBUIDORA, 013 VENDA DIRETA e
+     * 073 VIP. As vendas delas não formam carteira — cliente que só comprou por elas fica fora da lista, e
+     * quem também comprou com um representante fica com ele. O Wellpet vendido por elas continua contando
+     * (pra "já comprou" e pra positivação), porque o que vale é o cliente.
+     */
+    static final Set<String> CONTAS_SEM_CARTEIRA = Set.of("001", "013", "073");
 
     /** Montar a lista varre mais de um ano da ADS: alguns meses ao mesmo tempo, sem exagerar pra ela não recusar. */
     private static final int BUSCAS_SIMULTANEAS = 4;
@@ -149,7 +156,8 @@ public class AdsCampanhaWellpetService {
             if (venda.itens().stream().anyMatch(AdsCampanhaWellpetService::ehWellpet)) h.compraramWellpet.add(clienteId);
 
             LocalDate data = venda.dataFaturamento() == null ? null : venda.dataFaturamento().toLocalDate();
-            if (data == null || data.isBefore(inicioCarteira) || venda.representante() == null || venda.representante().id() == null) {
+            if (data == null || data.isBefore(inicioCarteira) || venda.representante() == null || venda.representante().id() == null
+                    || CONTAS_SEM_CARTEIRA.contains(venda.representante().id().trim())) {
                 continue;
             }
             h.registrarCompra(clienteId, new UltimaCompra(data, venda.cliente(), venda.representante()));

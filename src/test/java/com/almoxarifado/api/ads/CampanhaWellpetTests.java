@@ -74,6 +74,24 @@ class CampanhaWellpetTests {
     }
 
     @Test
+    void contasDaCasaNaoFormamCarteiraMasOWellpetDelasConta() {
+        AdsCampanhaWellpetService.Historico h = AdsCampanhaWellpetService.resumir(List.of(
+                venda("VENDA DE MERCADORIA", "1", "073", "2026-09-10", produto("MAXICAM")), // só VIP: fora
+                venda("VENDA DE MERCADORIA", "2", "003", "2026-03-02", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "2", "001", "2026-09-20", produto("MAXICAM")), // mais recente, mas é da casa
+                venda("VENDA DE MERCADORIA", "3", "003", "2026-04-02", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "3", "013", "2026-05-02", produto("WELLPET 400MG"))), // venda direta de Wellpet
+                LocalDate.of(2025, 10, 1));
+
+        assertThat(h.semWellpet(OUTUBRO)).singleElement()
+                .satisfies(c -> {
+                    assertThat(c.getCodigoCliente()).isEqualTo("2");
+                    assertThat(c.getRepresentanteCodigoAds()).isEqualTo("003");
+                    assertThat(c.getUltimaCompra()).isEqualTo(LocalDate.of(2026, 3, 2));
+                });
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void montarBuscaDoLancamentoAteOFimDoMesAnteriorMesAMes() {
         when(client.buscarTudo(any(), any(), isNull())).thenAnswer(inv -> {
