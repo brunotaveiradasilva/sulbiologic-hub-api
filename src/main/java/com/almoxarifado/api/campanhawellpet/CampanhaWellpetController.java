@@ -9,6 +9,7 @@ import com.almoxarifado.api.metarepresentante.Mes;
 import com.almoxarifado.api.representante.Representante;
 import com.almoxarifado.api.representante.RepresentanteRepository;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -59,26 +60,30 @@ public class CampanhaWellpetController {
                 .orElse(todos);
     }
 
-    /** percentual null = esse mês não está montando nem sincronizando agora. */
-    public record Progresso(Integer percentual) {
+    /**
+     * percentual null = esse mês não está montando nem sincronizando agora. erro = por que a última
+     * montagem do mês falhou (null se não falhou).
+     */
+    public record Progresso(Integer percentual, String erro) {
     }
 
-    /** Quanto já foi da montagem ou sincronização em andamento do mês (0 a 100), enquanto o POST não volta. */
+    /** Quanto já foi da montagem ou sincronização em andamento do mês (0 a 100), e o erro se a montagem falhou. */
     @GetMapping("/progresso")
     public Progresso progresso(@RequestParam(required = false) String mes) {
-        var p = servico.progresso(Mes.ler(mes));
-        return new Progresso(p.isPresent() ? p.getAsInt() : null);
+        YearMonth ym = Mes.ler(mes);
+        var p = servico.progresso(ym);
+        return new Progresso(p.isPresent() ? p.getAsInt() : null, servico.erro(ym).orElse(null));
     }
 
     /**
-     * Monta (ou refaz) a lista do mês da campanha a partir do histórico da ADS. Demora: varre mais de um
-     * ano de vendas. A positivação volta zerada; o front-end chama /sincronizar logo depois.
+     * Começa a montar (ou refazer) a lista do mês a partir do histórico da ADS e responde na hora (202):
+     * montar leva minutos, e a tela acompanha por /progresso. Quando ele parar sem erro, a lista está
+     * gravada, com a positivação zerada — o front-end chama /sincronizar em seguida.
      */
     @PostMapping("/montar")
-    public List<ClienteCampanhaWellpet> montar(@RequestParam(required = false) String mes) {
-        YearMonth ym = Mes.ler(mes);
-        servico.montarLista(ym);
-        return repository.findByMesOrderByRepresentanteAscNomeAsc(ym.toString());
+    public ResponseEntity<Void> montar(@RequestParam(required = false) String mes) {
+        servico.iniciarMontagem(Mes.ler(mes));
+        return ResponseEntity.accepted().build();
     }
 
     /** Busca agora na ADS quem da lista já comprou Wellpet no mês (o mês atual também roda sozinho todo dia). */

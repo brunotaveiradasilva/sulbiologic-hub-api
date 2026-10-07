@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.almoxarifado.api.campanhawellpet.ClienteCampanhaWellpet;
 import com.almoxarifado.api.campanhawellpet.ClienteCampanhaWellpetRepository;
+import com.almoxarifado.api.common.RecursoEmUsoException;
 import com.almoxarifado.api.metarepresentante.Mes;
 
 import jakarta.annotation.PreDestroy;
@@ -68,7 +70,11 @@ public class AdsCampanhaWellpetService {
     private final ClienteCampanhaWellpetRepository clientes;
     private final AdsHistoricoVendasClient client;
     private final ExecutorService buscas = Executors.newFixedThreadPool(BUSCAS_SIMULTANEAS);
+    /** Montagens iniciadas pela tela: uma de cada vez, fora da requisição (ver {@link #iniciarMontagem}). */
+    private final ExecutorService montagens = Executors.newSingleThreadExecutor();
     private final Map<String, Integer> progressoPorMes = new ConcurrentHashMap<>();
+    /** Por que a última montagem em segundo plano de cada mês falhou; some quando outra começa. */
+    private final Map<String, String> erroPorMes = new ConcurrentHashMap<>();
 
     public AdsCampanhaWellpetService(ClienteCampanhaWellpetRepository clientes, AdsHistoricoVendasClient client) {
         this.clientes = clientes;
@@ -78,6 +84,7 @@ public class AdsCampanhaWellpetService {
     @PreDestroy
     void encerrar() {
         buscas.shutdownNow();
+        montagens.shutdownNow();
     }
 
     /** Junto com as outras sincronizações: todo dia o mês atual, e nos primeiros dias também o anterior. */
@@ -94,6 +101,36 @@ public class AdsCampanhaWellpetService {
     public OptionalInt progresso(YearMonth mes) {
         Integer p = progressoPorMes.get(mes.toString());
         return p == null ? OptionalInt.empty() : OptionalInt.of(p);
+    }
+
+    /** Por que a última montagem em segundo plano do mês falhou; vazio se não falhou (ou ainda está rodando). */
+    public Optional<String> erro(YearMonth mes) {
+        return Optional.ofNullable(erroPorMes.get(mes.toString()));
+    }
+
+    /**
+     * Começa a montar a lista do mês e volta na hora. Montar leva minutos, e uma requisição aberta esse
+     * tempo todo cai no caminho (o proxy do Railway fecha a conexão antes da resposta): a tela acompanha
+     * por {@link #progresso} e {@link #erro}. Se o mês já está montando ou sincronizando, não começa outra.
+     */
+    public void iniciarMontagem(YearMonth mes) {
+        if (progressoPorMes.putIfAbsent(mes.toString(), 0) != null) {
+            throw new RecursoEmUsoException("A lista de " + mes + " já está sendo montada ou sincronizada. Espere terminar.");
+        }
+        erroPorMes.remove(mes.toString());
+        try {
+            montagens.submit(() -> {
+                try {
+                    montarLista(mes);
+                } catch (RuntimeException e) {
+                    log.warn("Não foi possível montar a lista da campanha Wellpet de {}", mes, e);
+                    erroPorMes.put(mes.toString(), e.getMessage() == null ? "Erro ao montar a lista. Tente de novo." : e.getMessage());
+                }
+            });
+        } catch (RuntimeException e) {
+            progressoPorMes.remove(mes.toString());
+            throw e;
+        }
     }
 
     /**
