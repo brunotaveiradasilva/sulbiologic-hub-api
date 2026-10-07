@@ -1,6 +1,7 @@
 package com.almoxarifado.api.ads;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -15,9 +16,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import com.almoxarifado.api.campanhawellpet.ClienteCampanhaWellpet;
 import com.almoxarifado.api.campanhawellpet.ClienteCampanhaWellpetRepository;
+import com.almoxarifado.api.common.RecursoEmUsoException;
 import com.almoxarifado.api.metarepresentante.Mes;
 
 import org.junit.jupiter.api.Test;
@@ -129,6 +134,44 @@ class CampanhaWellpetTests {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> servico.montarLista(OUTUBRO)).isInstanceOf(AdsApiException.class);
 
         verify(clientes, never()).deleteByMes(any());
+    }
+
+    @Test
+    void montagemEmSegundoPlanoVoltaNaHoraEGuardaOErro() throws Exception {
+        CountDownLatch liberar = new CountDownLatch(1);
+        when(client.buscarTudo(any(), any(), isNull())).thenAnswer(inv -> {
+            liberar.await(5, TimeUnit.SECONDS);
+            throw new AdsApiException("ADS respondeu 500", true);
+        });
+
+        servico.iniciarMontagem(OUTUBRO);
+
+        // Voltou antes de buscar: o mês aparece montando, e não dá pra começar outra por cima.
+        assertThat(servico.progresso(OUTUBRO)).isPresent();
+        assertThatThrownBy(() -> servico.iniciarMontagem(OUTUBRO)).isInstanceOf(RecursoEmUsoException.class);
+
+        liberar.countDown();
+        esperar(() -> servico.progresso(OUTUBRO).isEmpty());
+        assertThat(servico.erro(OUTUBRO)).contains("ADS respondeu 500");
+        verify(clientes, never()).deleteByMes(any());
+    }
+
+    @Test
+    void montagemEmSegundoPlanoGravaALista() throws Exception {
+        when(client.buscarTudo(any(), any(), isNull()))
+                .thenReturn(List.of(venda("VENDA DE MERCADORIA", "1", "003", "2026-09-10", produto("MAXICAM"))));
+
+        servico.iniciarMontagem(OUTUBRO);
+        esperar(() -> servico.progresso(OUTUBRO).isEmpty());
+
+        verify(clientes).deleteByMes("2026-10");
+        verify(clientes).saveAll(any());
+        assertThat(servico.erro(OUTUBRO)).isEmpty();
+    }
+
+    private static void esperar(BooleanSupplier condicao) throws InterruptedException {
+        for (int i = 0; i < 500 && !condicao.getAsBoolean(); i++) Thread.sleep(10);
+        assertThat(condicao.getAsBoolean()).isTrue();
     }
 
     @Test
