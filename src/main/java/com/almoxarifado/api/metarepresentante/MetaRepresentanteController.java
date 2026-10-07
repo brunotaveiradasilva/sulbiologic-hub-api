@@ -105,6 +105,8 @@ public class MetaRepresentanteController {
 
             // Valor 0 é "sem meta" (a sincronização cria só pra guardar o realizado): não tem o que copiar.
             if (origem.getValorMeta() <= 0) continue;
+            // Meta oculta fica só no mês em que valeu: não vai pro seguinte.
+            if (origem.getMeta().isOculta()) continue;
 
             // No destino, a linha "sem meta" da sincronização conta como vazia: ganha o valor e mantém o realizado.
             MetaRepresentante copia = repository.findByRepresentanteIdAndMetaIdAndMes(

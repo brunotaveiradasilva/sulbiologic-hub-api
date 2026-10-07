@@ -122,7 +122,8 @@ public class AdsSincronizacaoService {
         representantes.findAll().stream()
                 .filter(r -> temCodigo(r.getCodigoAds()))
                 .forEach(r -> aSincronizar.putIfAbsent(r.getId(), r));
-        List<Meta> todasAsMetas = metas.findAll().stream().filter(this::metaTemCodigo).toList();
+        // Meta oculta só sincroniza onde já tem atribuição: não ganha linha "sem meta" nova.
+        List<Meta> todasAsMetas = metas.findAll().stream().filter(m -> !m.isOculta()).filter(this::metaTemCodigo).toList();
 
         List<MetaRepresentante> atualizadas = new ArrayList<>();
         aSincronizar.forEach((representanteId, representante) -> {
