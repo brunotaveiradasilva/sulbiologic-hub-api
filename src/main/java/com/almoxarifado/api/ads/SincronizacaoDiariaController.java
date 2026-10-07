@@ -22,14 +22,17 @@ public class SincronizacaoDiariaController {
 
     private final AdsSincronizacaoService metas;
     private final AdsEspecialistaPetService especialistaPet;
+    private final AdsCampanhaWellpetService campanhaWellpet;
     private final byte[] token;
 
     public SincronizacaoDiariaController(
             AdsSincronizacaoService metas,
             AdsEspecialistaPetService especialistaPet,
+            AdsCampanhaWellpetService campanhaWellpet,
             @Value("${app.cron-token:}") String token) {
         this.metas = metas;
         this.especialistaPet = especialistaPet;
+        this.campanhaWellpet = campanhaWellpet;
         this.token = token.getBytes(StandardCharsets.UTF_8);
     }
 
@@ -41,6 +44,7 @@ public class SincronizacaoDiariaController {
         }
         metas.sincronizarAgendado();
         especialistaPet.sincronizarAgendado();
+        campanhaWellpet.sincronizarAgendado();
         return ResponseEntity.noContent().build();
     }
 }

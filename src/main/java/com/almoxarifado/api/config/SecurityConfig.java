@@ -37,6 +37,7 @@ public class SecurityConfig {
             "/api/metas/**",
             "/api/metas-representante/**",
             "/api/especialista-pet/**",
+            "/api/campanha-wellpet/**",
     };
 
     private final JwtAuthFilter jwtAuthFilter;

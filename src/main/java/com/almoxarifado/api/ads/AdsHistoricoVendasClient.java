@@ -34,6 +34,11 @@ public class AdsHistoricoVendasClient {
 
     private static final int MAX_PAGINAS = 1000;
     /**
+     * O maior tamanho de página que a ADS aceita (acima disso responde 400). Cada página leva uns 10s
+     * pra voltar, quase sem depender do tamanho — páginas grandes deixam a busca bem mais rápida.
+     */
+    private static final int TAMANHO_PAGINA = 500;
+    /**
      * Espera antes de cada nova tentativa de uma página que falhou. A ADS às vezes responde 500 numa
      * página qualquer no meio de uma busca longa (uma página diferente a cada vez) — sem tentar de
      * novo, uma página ruim derrubava a busca do mês inteiro.
@@ -87,7 +92,7 @@ public class AdsHistoricoVendasClient {
         int pagina = 1;
         AdsHistoricoVendasPagina resultado;
         do {
-            resultado = buscarPagina(dtInicio, dtFinal, reprId, pagina, 100);
+            resultado = buscarPagina(dtInicio, dtFinal, reprId, pagina, TAMANHO_PAGINA);
             todas.addAll(resultado.items());
             aoLerPagina.accept(todas.size(), resultado.total());
             pagina++;

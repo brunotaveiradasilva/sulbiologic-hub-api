@@ -27,9 +27,16 @@ record AdsVenda(
     record AdsFornecedor(String cnpj) {
     }
 
-    /** O id vem como número na ADS; aqui é só a chave pra contar clientes diferentes (metas CLIENTES). */
+    /**
+     * O id vem como número na ADS; é a chave pra contar clientes diferentes (metas CLIENTES). Nome,
+     * CPF/CNPJ e segmento (ex.: "VETERINARIOS") só a campanha Wellpet usa, pra listar o cliente.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record AdsCliente(String id) {
+    record AdsCliente(String id, String cnpjCpf, String nome, String segmento) {
+
+        AdsCliente(String id) {
+            this(id, null, null, null);
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
