@@ -39,7 +39,7 @@ import org.springframework.stereotype.Service;
  *   qualquer coisa com ele nos {@value #MESES_DE_CARTEIRA} meses antes da campanha; desses, fica quem
  *   não tem nenhuma compra de Wellpet (com qualquer representante) desde o lançamento, em
  *   {@link #LANCAMENTO_WELLPET}. Cliente atendido por mais de um representante fica com o da última
- *   compra. Vendas das contas da casa ({@link #CONTAS_SEM_CARTEIRA}) não formam carteira.</li>
+ *   compra. Só os {@link #REPRESENTANTES_DA_CAMPANHA} têm carteira.</li>
  *   <li><b>Positivação</b> ({@link #sincronizarMes}): o Wellpet que cada cliente da lista comprou no mês
  *   da campanha, com qualquer representante — o que vale é o cliente.</li>
  * </ul>
@@ -57,12 +57,14 @@ public class AdsCampanhaWellpetService {
     static final LocalDate LANCAMENTO_WELLPET = LocalDate.of(2025, 9, 1);
     static final int MESES_DE_CARTEIRA = 12;
     /**
-     * Contas da casa na ADS que não são representantes: 001 SULBIOLOGIC DISTRIBUIDORA, 013 VENDA DIRETA e
-     * 073 VIP. As vendas delas não formam carteira — cliente que só comprou por elas fica fora da lista, e
-     * quem também comprou com um representante fica com ele. O Wellpet vendido por elas continua contando
-     * (pra "já comprou" e pra positivação), porque o que vale é o cliente.
+     * Os representantes que participam da campanha, pelo código na ADS: 005 Marcelo Albuquerque,
+     * 021 Emerson Alexandre, 030 Julio Cezar, 043 Paulo Cesar Duarte, 053 Josenias Lopes,
+     * 077 Emanuel Cirilo, 079 Nayara Nunes e 080 Sabrina Nantes. Só as vendas deles formam carteira:
+     * cliente que só comprou com outros fica fora da lista, e quem comprou com um deles e com outro fica
+     * com ele. O Wellpet vendido por qualquer um continua contando (pra "já comprou" e pra positivação),
+     * porque o que vale é o cliente.
      */
-    static final Set<String> CONTAS_SEM_CARTEIRA = Set.of("001", "013", "073");
+    static final Set<String> REPRESENTANTES_DA_CAMPANHA = Set.of("005", "021", "030", "043", "053", "077", "079", "080");
 
     /** Montar a lista varre mais de um ano da ADS: alguns meses ao mesmo tempo, sem exagerar pra ela não recusar. */
     private static final int BUSCAS_SIMULTANEAS = 4;
@@ -194,7 +196,7 @@ public class AdsCampanhaWellpetService {
 
             LocalDate data = venda.dataFaturamento() == null ? null : venda.dataFaturamento().toLocalDate();
             if (data == null || data.isBefore(inicioCarteira) || venda.representante() == null || venda.representante().id() == null
-                    || CONTAS_SEM_CARTEIRA.contains(venda.representante().id().trim())) {
+                    || !REPRESENTANTES_DA_CAMPANHA.contains(venda.representante().id().trim())) {
                 continue;
             }
             h.registrarCompra(clienteId, new UltimaCompra(data, venda.cliente(), venda.representante()));
