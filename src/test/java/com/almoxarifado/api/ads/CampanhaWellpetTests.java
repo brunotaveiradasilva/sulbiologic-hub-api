@@ -48,12 +48,12 @@ class CampanhaWellpetTests {
     void listaQuemDaCarteiraNuncaComprouWellpet() {
         LocalDate inicioCarteira = LocalDate.of(2025, 10, 1);
         AdsCampanhaWellpetService.Historico h = AdsCampanhaWellpetService.resumir(List.of(
-                venda("VENDA DE MERCADORIA", "1", "003", "2026-09-10", produto("MAXICAM")),
-                venda("VENDA DE MERCADORIA", "2", "003", "2026-08-01", produto("MAXICAM")),
-                venda("VENDA DE MERCADORIA", "2", "003", "2025-09-15", produto("WELLPET 400MG")), // comprou no lançamento
-                venda("BONIFICACAO CREDITO", "3", "003", "2026-05-01", produto("WELLPET 400MG")), // só ganhou: continua
-                venda("VENDA DE MERCADORIA", "3", "003", "2026-05-01", produto("MAXICAM")),
-                venda("VENDA DE MERCADORIA", "4", "003", "2025-09-20", produto("MAXICAM"))), // fora da carteira
+                venda("VENDA DE MERCADORIA", "1", "021", "2026-09-10", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "2", "021", "2026-08-01", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "2", "021", "2025-09-15", produto("WELLPET 400MG")), // comprou no lançamento
+                venda("BONIFICACAO CREDITO", "3", "021", "2026-05-01", produto("WELLPET 400MG")), // só ganhou: continua
+                venda("VENDA DE MERCADORIA", "3", "021", "2026-05-01", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "4", "021", "2025-09-20", produto("MAXICAM"))), // fora da carteira
                 inicioCarteira);
 
         List<ClienteCampanhaWellpet> lista = h.semWellpet(OUTUBRO);
@@ -61,7 +61,7 @@ class CampanhaWellpetTests {
         assertThat(lista).extracting(ClienteCampanhaWellpet::getCodigoCliente).containsExactlyInAnyOrder("1", "3");
         ClienteCampanhaWellpet um = lista.stream().filter(c -> c.getCodigoCliente().equals("1")).findFirst().orElseThrow();
         assertThat(um.getNome()).isEqualTo("CLIENTE 1");
-        assertThat(um.getRepresentanteCodigoAds()).isEqualTo("003");
+        assertThat(um.getRepresentanteCodigoAds()).isEqualTo("021");
         assertThat(um.getUltimaCompra()).isEqualTo(LocalDate.of(2026, 9, 10));
         assertThat(um.getMes()).isEqualTo("2026-10");
     }
@@ -69,29 +69,29 @@ class CampanhaWellpetTests {
     @Test
     void clienteDeDoisRepresentantesFicaComODaUltimaCompra() {
         AdsCampanhaWellpetService.Historico h = AdsCampanhaWellpetService.resumir(List.of(
-                venda("VENDA DE MERCADORIA", "1", "003", "2026-09-10", produto("MAXICAM"))), LocalDate.of(2025, 10, 1));
+                venda("VENDA DE MERCADORIA", "1", "021", "2026-09-10", produto("MAXICAM"))), LocalDate.of(2025, 10, 1));
         // Outro mês, buscado em paralelo e juntado depois.
         h.juntar(AdsCampanhaWellpetService.resumir(List.of(
-                venda("VENDA DE MERCADORIA", "1", "007", "2026-03-02", produto("MAXICAM"))), LocalDate.of(2025, 10, 1)));
+                venda("VENDA DE MERCADORIA", "1", "030", "2026-03-02", produto("MAXICAM"))), LocalDate.of(2025, 10, 1)));
 
         assertThat(h.semWellpet(OUTUBRO)).singleElement()
-                .extracting(ClienteCampanhaWellpet::getRepresentanteCodigoAds).isEqualTo("003");
+                .extracting(ClienteCampanhaWellpet::getRepresentanteCodigoAds).isEqualTo("021");
     }
 
     @Test
-    void contasDaCasaNaoFormamCarteiraMasOWellpetDelasConta() {
+    void soOsRepresentantesDaCampanhaTemCarteiraMasOWellpetDeQualquerUmConta() {
         AdsCampanhaWellpetService.Historico h = AdsCampanhaWellpetService.resumir(List.of(
-                venda("VENDA DE MERCADORIA", "1", "073", "2026-09-10", produto("MAXICAM")), // só VIP: fora
-                venda("VENDA DE MERCADORIA", "2", "003", "2026-03-02", produto("MAXICAM")),
-                venda("VENDA DE MERCADORIA", "2", "001", "2026-09-20", produto("MAXICAM")), // mais recente, mas é da casa
-                venda("VENDA DE MERCADORIA", "3", "003", "2026-04-02", produto("MAXICAM")),
-                venda("VENDA DE MERCADORIA", "3", "013", "2026-05-02", produto("WELLPET 400MG"))), // venda direta de Wellpet
+                venda("VENDA DE MERCADORIA", "1", "073", "2026-09-10", produto("MAXICAM")), // só com quem não participa (VIP): fora
+                venda("VENDA DE MERCADORIA", "2", "021", "2026-03-02", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "2", "001", "2026-09-20", produto("MAXICAM")), // mais recente, mas não participa
+                venda("VENDA DE MERCADORIA", "3", "021", "2026-04-02", produto("MAXICAM")),
+                venda("VENDA DE MERCADORIA", "3", "013", "2026-05-02", produto("WELLPET 400MG"))), // Wellpet de quem não participa também conta
                 LocalDate.of(2025, 10, 1));
 
         assertThat(h.semWellpet(OUTUBRO)).singleElement()
                 .satisfies(c -> {
                     assertThat(c.getCodigoCliente()).isEqualTo("2");
-                    assertThat(c.getRepresentanteCodigoAds()).isEqualTo("003");
+                    assertThat(c.getRepresentanteCodigoAds()).isEqualTo("021");
                     assertThat(c.getUltimaCompra()).isEqualTo(LocalDate.of(2026, 3, 2));
                 });
     }
@@ -102,12 +102,12 @@ class CampanhaWellpetTests {
         when(client.buscarTudo(any(), any(), isNull())).thenAnswer(inv -> {
             LocalDate de = inv.getArgument(0);
             if (de.equals(LocalDate.of(2025, 9, 1))) {
-                return List.of(venda("VENDA DE MERCADORIA", "2", "003", "2025-09-15", produto("WELLPET 400MG")));
+                return List.of(venda("VENDA DE MERCADORIA", "2", "021", "2025-09-15", produto("WELLPET 400MG")));
             }
             if (de.equals(LocalDate.of(2026, 9, 1))) {
                 return List.of(
-                        venda("VENDA DE MERCADORIA", "1", "003", "2026-09-10", produto("MAXICAM")),
-                        venda("VENDA DE MERCADORIA", "2", "003", "2026-09-11", produto("MAXICAM")));
+                        venda("VENDA DE MERCADORIA", "1", "021", "2026-09-10", produto("MAXICAM")),
+                        venda("VENDA DE MERCADORIA", "2", "021", "2026-09-11", produto("MAXICAM")));
             }
             return List.of();
         });
@@ -159,7 +159,7 @@ class CampanhaWellpetTests {
     @Test
     void montagemEmSegundoPlanoGravaALista() throws Exception {
         when(client.buscarTudo(any(), any(), isNull()))
-                .thenReturn(List.of(venda("VENDA DE MERCADORIA", "1", "003", "2026-09-10", produto("MAXICAM"))));
+                .thenReturn(List.of(venda("VENDA DE MERCADORIA", "1", "021", "2026-09-10", produto("MAXICAM"))));
 
         servico.iniciarMontagem(OUTUBRO);
         esperar(() -> servico.progresso(OUTUBRO).isEmpty());
@@ -177,10 +177,10 @@ class CampanhaWellpetTests {
     @Test
     void positivaQuemComprouWellpetNoMesDescontandoDevolucao() {
         Map<String, AdsCampanhaWellpetService.CompraWellpet> r = AdsCampanhaWellpetService.somarWellpet(List.of(
-                venda("VENDA DE MERCADORIA", "1", "007", "2026-10-08", item("WELLPET 400MG", 3, 90), item("MAXICAM", 1, 50)),
-                venda("VENDA DE MERCADORIA", "1", "007", "2026-10-03", item("WELLPET 50MG", 1, 40)),
-                venda("DEV. VENDA", "1", "007", "2026-10-09", item("WELLPET 400MG", 1, 30)),
-                venda("BONIFICACAO CREDITO", "2", "003", "2026-10-02", item("WELLPET 400MG", 1, 30))));
+                venda("VENDA DE MERCADORIA", "1", "030", "2026-10-08", item("WELLPET 400MG", 3, 90), item("MAXICAM", 1, 50)),
+                venda("VENDA DE MERCADORIA", "1", "030", "2026-10-03", item("WELLPET 50MG", 1, 40)),
+                venda("DEV. VENDA", "1", "030", "2026-10-09", item("WELLPET 400MG", 1, 30)),
+                venda("BONIFICACAO CREDITO", "2", "021", "2026-10-02", item("WELLPET 400MG", 1, 30))));
 
         assertThat(r.get("1").reais).isCloseTo(90 + 40 - 30, within(1e-9));
         assertThat(r.get("1").unidades).isCloseTo(3, within(1e-9));
@@ -196,9 +196,9 @@ class CampanhaWellpetTests {
         when(clientes.findByMes(Mes.atual().toString())).thenReturn(List.of(comprou, devolveuTudo));
         String hoje = LocalDate.now(Mes.FUSO).toString();
         when(client.buscarTudo(any(), any(), isNull(), any())).thenReturn(List.of(
-                venda("VENDA DE MERCADORIA", "1", "003", hoje, item("WELLPET 400MG", 2, 180)),
-                venda("VENDA DE MERCADORIA", "2", "003", hoje, item("WELLPET 400MG", 1, 90)),
-                venda("DEV. VENDA", "2", "003", hoje, item("WELLPET 400MG", 1, 90))));
+                venda("VENDA DE MERCADORIA", "1", "021", hoje, item("WELLPET 400MG", 2, 180)),
+                venda("VENDA DE MERCADORIA", "2", "021", hoje, item("WELLPET 400MG", 1, 90)),
+                venda("DEV. VENDA", "2", "021", hoje, item("WELLPET 400MG", 1, 90))));
 
         servico.sincronizarMes(Mes.atual());
 
