@@ -32,13 +32,15 @@ class SincronizacaoDiariaTests {
     @Autowired MockMvc mvc;
     @MockBean AdsSincronizacaoService metas;
     @MockBean AdsEspecialistaPetService especialistaPet;
+    @MockBean AdsCampanhaWellpetService campanhaWellpet;
 
     @Test
-    void comOTokenCertoSincronizaMetasEEspecialistaPet() throws Exception {
+    void comOTokenCertoSincronizaMetasECampanhas() throws Exception {
         mvc.perform(post(ROTA).header("X-Cron-Token", "segredo-do-scheduler"))
                 .andExpect(status().isNoContent());
         verify(metas).sincronizarAgendado();
         verify(especialistaPet).sincronizarAgendado();
+        verify(campanhaWellpet).sincronizarAgendado();
     }
 
     @Test
@@ -47,5 +49,6 @@ class SincronizacaoDiariaTests {
         mvc.perform(post(ROTA).header("X-Cron-Token", "chute")).andExpect(status().isUnauthorized());
         verify(metas, never()).sincronizarAgendado();
         verify(especialistaPet, never()).sincronizarAgendado();
+        verify(campanhaWellpet, never()).sincronizarAgendado();
     }
 }
