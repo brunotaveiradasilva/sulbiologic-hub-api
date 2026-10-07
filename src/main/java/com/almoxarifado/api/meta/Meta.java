@@ -86,6 +86,14 @@ public class Meta {
     private Integer diaInicio;
     private Integer diaFim;
 
+    /**
+     * Meta guardada só pelo histórico (ex: uma campanha que valeu só em setembro): some das telas de
+     * consulta nos meses sem valor de meta, não é copiada pro mês seguinte e a sincronização não cria
+     * linha "sem meta" pra ela. As atribuições que já existem continuam como estão.
+     */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean oculta;
+
     public Meta() {
     }
 
@@ -189,5 +197,13 @@ public class Meta {
 
     public void setDiaFim(Integer diaFim) {
         this.diaFim = diaFim;
+    }
+
+    public boolean isOculta() {
+        return oculta;
+    }
+
+    public void setOculta(boolean oculta) {
+        this.oculta = oculta;
     }
 }

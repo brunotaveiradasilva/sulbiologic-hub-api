@@ -83,6 +83,18 @@ class OrdemDasMetasTests {
         assertThat(nomes(controller.listar())).containsExactly("Wellpet", "Alfa", "Zeta");
     }
 
+    @Test
+    void ocultarEMostrarNaoTiraAMetaDaLista() {
+        Meta wellpet = criar("Wellpet");
+        assertThat(wellpet.isOculta()).isFalse();
+
+        assertThat(controller.ocultar(wellpet.getId(), new OcultarMetaRequest(true)).isOculta()).isTrue();
+        assertThat(nomes(controller.listar())).containsExactly("Wellpet");
+        assertThat(controller.listar().get(0).isOculta()).isTrue();
+
+        assertThat(controller.ocultar(wellpet.getId(), new OcultarMetaRequest(false)).isOculta()).isFalse();
+    }
+
     private Meta criar(String nome) {
         return controller.criar(new MetaRequest(nome, ourofino.getId(), UnidadeMeta.REAL, "", "", "", "", null, null, null));
     }

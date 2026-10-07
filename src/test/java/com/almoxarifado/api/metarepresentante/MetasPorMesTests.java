@@ -119,6 +119,20 @@ class MetasPorMesTests {
     }
 
     @Test
+    void metaOcultaNaoECopiadaProMesSeguinte() {
+        salvar(v10, ANTERIOR, 500, 480);
+        salvar(geralCeva, ANTERIOR, 1000, 900);
+        geralCeva.setOculta(true);
+        metas.save(geralCeva);
+
+        List<MetaRepresentante> criadas = controller.copiar(new CopiarMetasRequest(ANTERIOR, ATUAL, null));
+
+        assertThat(criadas).extracting(mv -> mv.getMeta().getId()).containsExactly(v10.getId());
+        // O valor do mês em que ela valeu continua lá.
+        assertThat(atribuicoes.findByRepresentanteIdAndMetaIdAndMes(marina.getId(), geralCeva.getId(), ANTERIOR)).isPresent();
+    }
+
+    @Test
     void mesmaMetaPodeTerValorDiferenteEmCadaMesMasNaoDuasNoMesmoMes() {
         controller.criar(new MetaRepresentanteRequest(marina.getId(), v10.getId(), ATUAL, 650.0));
         controller.criar(new MetaRepresentanteRequest(marina.getId(), v10.getId(), PROXIMO, 700.0));

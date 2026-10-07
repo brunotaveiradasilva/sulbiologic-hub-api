@@ -81,6 +81,14 @@ public class MetaController {
         return repository.save(existente);
     }
 
+    /** Oculta ou volta a mostrar a meta, sem mexer no resto dela nem nas atribuições. */
+    @PutMapping("/{id}/oculta")
+    public Meta ocultar(@PathVariable String id, @Valid @RequestBody OcultarMetaRequest corpo) {
+        Meta existente = buscarOuFalhar(id);
+        existente.setOculta(corpo.oculta());
+        return repository.save(existente);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void excluir(@PathVariable String id) {
